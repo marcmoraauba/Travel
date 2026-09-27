@@ -95,6 +95,7 @@ export default function AddPlaceScreen() {
           label={`Buscar en ${trip.city}`}
           placeholder="Coliseo, Museo del Prado…"
           near={{ lat: trip.centerLat, lng: trip.centerLng }}
+          cityName={trip.city}
           onSelect={addFromSearch}
         />
 

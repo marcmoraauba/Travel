@@ -27,6 +27,7 @@ export default function PlaceScreen() {
   const [place, setPlace] = useState<Place | null>(null);
   const [days, setDays] = useState<Day[]>([]);
   const [center, setCenter] = useState<{ lat: number; lng: number } | null>(null);
+  const [cityName, setCityName] = useState<string | undefined>(undefined);
 
   const [name, setName] = useState('');
   const [minutes, setMinutes] = useState('60');
@@ -46,7 +47,10 @@ export default function PlaceScreen() {
       const [trip, ds, booking] = await Promise.all([repo.getTrip(db, p.tripId), repo.listDays(db, p.tripId), repo.getBooking(db, p.id)]);
       setPlace(p);
       setDays(ds);
-      if (trip) setCenter({ lat: trip.centerLat, lng: trip.centerLng });
+      if (trip) {
+        setCenter({ lat: trip.centerLat, lng: trip.centerLng });
+        setCityName(trip.city);
+      }
       setName(p.name);
       setMinutes(String(p.visitMinutes));
       setPriority(p.priority);
@@ -139,6 +143,7 @@ export default function PlaceScreen() {
             label="Ubicación"
             placeholder="Busca el sitio para situarlo en el mapa"
             near={center ?? undefined}
+            cityName={cityName}
             onSelect={(r) => setLocation({ lat: r.lat, lng: r.lng, address: r.address ?? r.name })}
           />
         )}

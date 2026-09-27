@@ -1,7 +1,38 @@
 # Probar Travel en tu móvil
 
-La app usa módulos nativos (mapa, SQLite, voz), así que **no funciona en Expo Go**: hay que
-instalar un build propio. El camino más rápido es Android, porque instalas un APK directamente.
+## Opción rápida: Expo Go (5 minutos, sin cuentas)
+
+Necesitas un ordenador con [Node.js 22](https://nodejs.org) y el móvil en la **misma wifi**.
+
+1. Instala **Expo Go** en el móvil (App Store o Google Play).
+2. En el ordenador:
+   ```bash
+   git clone https://github.com/marcmoraauba/Travel.git
+   cd Travel
+   git checkout claude/app-apple-play-store-io8yr0
+   npm install
+   npx expo start --go
+   ```
+3. Escanea el QR que aparece: en iPhone con la cámara, en Android desde Expo Go.
+   Si no conecta (wifi de empresa, etc.): `npx expo start --go --tunnel`.
+
+Qué funciona así y qué no:
+
+| Funciona | No funciona (necesita la opción completa) |
+|---|---|
+| Crear viajes, fechas, ritmo | Mapa (su módulo no existe en Expo Go) |
+| Buscar lugares con el buscador **básico del móvil** (direcciones y sitios conocidos) | Horarios automáticos de los sitios (ponlos a mano en la ficha) |
+| Optimizar la ruta, repartir por días, reservas, comida, "voy tarde" | Tiempos reales: usa estimaciones por distancia |
+| Todo se guarda en el móvil | Guías narradas (se generan en el servidor) |
+
+Es suficiente para comprobar el flujo y el motor de rutas. Para el mapa y las guías, sigue abajo.
+
+---
+
+## Opción completa: build propio
+
+La app completa usa el mapa de Mapbox, que no existe en Expo Go, así que hay que instalar un
+build propio. El camino más rápido es Android, porque instalas un APK directamente.
 
 ## 1. Una vez: cuentas y backend
 

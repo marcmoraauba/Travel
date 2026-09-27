@@ -6,6 +6,7 @@ import { useData } from '../../../components/useData';
 import { Badge, Button, Card, Muted, Notice, SectionTitle, Title } from '../../../components/ui';
 import { deleteTrip, getTrip, listDays, listPlaces } from '../../../db/repo';
 import type { Place } from '../../../db/types';
+import { hasBackend } from '../../../services/config';
 import { guideCoverage, prepareTripGuides } from '../../../services/guides';
 import { distributeTrip } from '../../../services/planner';
 import { space, useColors } from '../../../theme';
@@ -152,7 +153,9 @@ export default function TripScreen() {
           <SectionTitle right={<Badge text={`${guides.ready}/${guides.total}`} tone={guides.ready === guides.total ? 'primary' : 'warning'} />}>
             Guías narradas
           </SectionTitle>
-          {guides.ready === guides.total ? (
+          {!hasBackend() ? (
+            <Muted>Las guías se generan en el servidor: necesitan el backend configurado.</Muted>
+          ) : guides.ready === guides.total ? (
             <Muted>Todas descargadas: puedes escucharlas sin conexión.</Muted>
           ) : (
             <>

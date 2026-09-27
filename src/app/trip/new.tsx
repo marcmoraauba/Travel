@@ -165,6 +165,7 @@ export default function TripFormScreen() {
               label="Alojamiento (opcional)"
               placeholder="Hotel o dirección"
               near={city}
+              cityName={city.name}
               onSelect={(r) => setBase({ name: r.name, lat: r.lat, lng: r.lng })}
             />
             <Badge text="Sin alojamiento, cada día empieza y acaba en el centro" />
