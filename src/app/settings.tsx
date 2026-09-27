@@ -32,8 +32,8 @@ export default function SettingsScreen() {
         <Title>Tus datos se quedan en tu móvil</Title>
         <Muted style={{ marginTop: space.xs }}>
           Los viajes se guardan solo en este dispositivo. Para buscar sitios y calcular tiempos se envían
-          búsquedas y coordenadas de los lugares a nuestro servidor, que las reenvía a Mapbox. Las sugerencias
-          y guías de IA envían la ciudad y los nombres de los lugares a Anthropic (Claude). No hay cuentas ni
+          búsquedas y coordenadas de los lugares a nuestro servidor, que las reenvía a Mapbox. Las guías de IA
+          envían la ciudad y el nombre del lugar a Anthropic (Claude). No hay cuentas ni
           publicidad. La voz de las guías es la de tu móvil.
         </Muted>
       </Card>

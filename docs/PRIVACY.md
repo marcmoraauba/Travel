@@ -1,6 +1,6 @@
 # Política de privacidad de Travel
 
-Última actualización: 27 de septiembre de 2026 (añadidas sugerencias y guías con IA).
+Última actualización: 27 de septiembre de 2026 (añadidas guías con IA).
 
 Travel es un planificador de rutas para viajes. Esta política explica qué datos maneja la app.
 
@@ -21,10 +21,8 @@ a nuestro servidor (un servicio en Cloudflare) y este reenvía a **Mapbox**:
 
 Además, el mapa descarga imágenes directamente de Mapbox, que recibe la zona del mapa que estás viendo.
 
-Si usas las **sugerencias de la IA** o las **guías narradas**, nuestro servidor envía a
-**Anthropic** (el proveedor del modelo de IA Claude) la ciudad, el número de días, lo que escribas
-en "¿Qué te apetece ver?", los nombres de los lugares que ya tienes en el viaje y, para las guías,
-el nombre y las coordenadas del lugar. No se envía ningún dato personal. Las guías generadas se
+Si usas las **guías narradas**, nuestro servidor envía a **Anthropic** (el proveedor del modelo
+de IA Claude) la ciudad y el nombre y las coordenadas del lugar. No se envía ningún dato personal. Las guías generadas se
 guardan en nuestro servidor, sin asociarlas a nadie, para servir la misma guía a todos los viajeros
 que visiten ese lugar. Política de Anthropic: https://www.anthropic.com/legal/privacy
 

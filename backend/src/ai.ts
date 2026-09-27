@@ -1,14 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
-import * as z from 'zod/v4';
 import { HttpError, sha256 } from './http';
-import type { Env, Point, SearchResult } from './index';
+import type { Env } from './index';
 
 /**
- * IA del backend (§5b y §6 del plan):
- * - Recomendación de lugares: la IA propone nombres; aquí se geocodifican contra Mapbox y solo
- *   los que casan con confianza llevan coordenadas. El resto lo resuelve el usuario.
- * - Guía narrada: texto escrito para escucharse, cacheado en KV por (lugar, idioma, longitud).
+ * IA del backend (§6 del plan): guía narrada, texto escrito para escucharse,
+ * cacheado en KV por (lugar, idioma, longitud).
  */
 
 const MODEL = 'claude-opus-5';
@@ -39,105 +35,6 @@ function normalize(text: string) {
     .replace(/[^a-z0-9 ]/g, ' ')
     .split(/\s+/)
     .filter((w) => w.length > 2 && !['the', 'del', 'los', 'las', 'della', 'di'].includes(w));
-}
-
-/** Coincidencia de nombres tolerante: "Colosseo" ~ "Coliseo" no, pero "Museo del Prado" ~ "Prado Museum" sí. */
-export function namesMatch(a: string, b: string) {
-  const wa = normalize(a);
-  const wb = new Set(normalize(b));
-  if (!wa.length || !wb.size) return false;
-  const shared = wa.filter((w) => wb.has(w) || [...wb].some((x) => x.startsWith(w.slice(0, 5)) && w.length >= 5)).length;
-  return shared / Math.min(wa.length, wb.size) >= 0.5;
-}
-
-function distanceKm(a: Point, b: Point) {
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const h =
-    Math.sin(toRad(b.lat - a.lat) / 2) ** 2 +
-    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(toRad(b.lng - a.lng) / 2) ** 2;
-  return 12_742 * Math.asin(Math.sqrt(h));
-}
-
-// ——— Recomendación ———
-
-const CATEGORIES = ['museum', 'monument', 'church', 'park', 'viewpoint', 'market', 'restaurant', 'cafe', 'other'] as const;
-
-const Recommendation = z.object({
-  places: z.array(
-    z.object({
-      name: z.string().describe('Nombre con el que aparece en los mapas, en el idioma local si es el habitual'),
-      searchQuery: z.string().describe('Texto para buscarlo en un mapa: nombre local + ciudad'),
-      category: z.enum(CATEGORIES),
-      reason: z.string().describe('Una frase: por qué merece la pena, en el idioma del usuario'),
-      visitMinutes: z.number().int().describe('Duración realista de la visita en minutos'),
-      priority: z.enum(['must', 'optional']),
-    }),
-  ),
-});
-
-export async function recommendPlaces(
-  env: Env,
-  body: unknown,
-  geocode: (q: string, near: Point) => Promise<SearchResult[]>,
-) {
-  const b = (body ?? {}) as Record<string, unknown>;
-  const city = str(b.city, 100, 'city');
-  const center = { lat: num(b.lat, 'lat'), lng: num(b.lng, 'lng') };
-  const days = Math.min(Math.max(Math.round(num(b.days ?? 1, 'days')), 1), 21);
-  const request = typeof b.request === 'string' ? b.request.trim().slice(0, 500) : '';
-  const existing = Array.isArray(b.existing) ? b.existing.filter((x) => typeof x === 'string').slice(0, 100) : [];
-  const language = lang(b.lang);
-  const count = Math.min(Math.max(days * 4, 5), 20);
-
-  const response = await client(env).beta.messages.parse({
-    model: MODEL,
-    max_tokens: 16000,
-    betas: [FALLBACK_BETA],
-    fallbacks: 'default',
-    output_config: { effort: 'medium', format: betaZodOutputFormat(Recommendation) },
-    system:
-      'Eres un guía local experto que ayuda a planificar visitas urbanas. Propón lugares reales y ' +
-      'visitables que existan hoy, con el nombre exacto con el que aparecen en los mapas. No incluyas ' +
-      'horarios ni precios: la app los obtiene de otras fuentes. Si el usuario pide algo concreto ' +
-      '(con niños, gratis, poco turístico, un barrio), ajústate a ello.',
-    messages: [
-      {
-        role: 'user',
-        content:
-          `Ciudad: ${city}. Días de visita: ${days}. Propón unos ${count} lugares.\n` +
-          (request ? `Lo que busca el viajero: ${request}\n` : '') +
-          (existing.length ? `Ya tiene en su lista (no los repitas): ${existing.join('; ')}\n` : '') +
-          `Responde en el idioma con código "${language}".`,
-      },
-    ],
-  });
-  if (response.stop_reason === 'refusal') throw new HttpError(422, 'La IA no ha podido responder a esta petición');
-  const parsed = response.parsed_output;
-  if (!parsed) throw new HttpError(502, 'Respuesta de la IA no válida');
-
-  // Geocodificación: solo entra con coordenadas lo que casa por nombre y está cerca de la ciudad.
-  const suggestions = await Promise.all(
-    parsed.places.slice(0, 20).map(async (p) => {
-      let match: SearchResult | null = null;
-      try {
-        const candidates = await geocode(p.searchQuery || `${p.name} ${city}`, center);
-        match =
-          candidates.find((c) => distanceKm(center, c) <= 30 && (namesMatch(p.name, c.name) || namesMatch(c.name, p.name))) ??
-          null;
-      } catch {
-        match = null;
-      }
-      return {
-        name: p.name,
-        category: p.category,
-        reason: p.reason,
-        visitMinutes: Math.min(Math.max(p.visitMinutes, 10), 480),
-        priority: p.priority,
-        match,
-      };
-    }),
-  );
-  return { suggestions };
 }
 
 // ——— Guía narrada ———

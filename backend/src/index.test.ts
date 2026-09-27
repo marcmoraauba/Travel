@@ -1,18 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { namesMatch } from './ai';
 import { periodsToOsm } from './index';
-
-describe('namesMatch', () => {
-  it('acepta variantes del mismo nombre', () => {
-    expect(namesMatch('Colosseo', 'Colosseum')).toBe(true);
-    expect(namesMatch('Fontana di Trevi', 'Trevi Fountain')).toBe(true);
-    expect(namesMatch('Museo del Prado', 'Museo Nacional del Prado')).toBe(true);
-  });
-  it('rechaza lugares distintos', () => {
-    expect(namesMatch('Panteón', 'Piazza Navona')).toBe(false);
-    expect(namesMatch('Sagrada Família', 'Park Güell')).toBe(false);
-  });
-});
 
 describe('periodsToOsm', () => {
   it('convierte periodos de Mapbox (0 = domingo) a opening_hours', () => {

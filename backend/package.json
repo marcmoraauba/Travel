@@ -13,7 +13,6 @@
     "wrangler": "^4.142.0"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.128.0",
-    "zod": "^4.6.5"
+    "@anthropic-ai/sdk": "^0.128.0"
   }
 }

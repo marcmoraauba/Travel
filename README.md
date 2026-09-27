@@ -10,7 +10,7 @@ respetando horarios de apertura, reservas y tiempos reales de desplazamiento.
 | Fase | Contenido | Estado |
 |---|---|---|
 | F0 | Expo + Expo Router, SQLite, modelo de datos, mapa Mapbox | ✅ |
-| F1 | Viajes, lugares (buscador, alta manual y sugerencias de la IA con verificación en mapa) | ✅ |
+| F1 | Viajes, lugares (buscador y alta manual), ficha editable, lista por días | ✅ |
 | F2 | Optimizador con tests, matriz Mapbox, horario + mapa del día | ✅ |
 | F3 | Reparto multi-día por zonas, "voy tarde" (recalcular el resto del día desde ahora) | ✅ |
 | F4 | Guía narrada: textos de Claude cacheados en el backend, descarga offline, voz del sistema | ✅ (voz neuronal: pendiente) |
@@ -57,7 +57,7 @@ npx expo start
 1. **Mapbox** ([account.mapbox.com](https://account.mapbox.com)):
    - Token **público** (`pk.…`) → `EXPO_PUBLIC_MAPBOX_TOKEN` (pinta el mapa).
    - Token **secreto** (`sk.…`) con permisos de Search y Directions/Matrix → solo en el Worker.
-2. **Claude API** ([console.anthropic.com](https://console.anthropic.com)): clave para sugerencias y guías → solo en el Worker.
+2. **Claude API** ([console.anthropic.com](https://console.anthropic.com)): clave para las guías narradas → solo en el Worker.
 3. **Cloudflare** (gratis) para el backend:
    ```bash
    cd backend && npm install
@@ -67,8 +67,7 @@ npx expo start
    npx wrangler kv namespace create GUIDES   # pega el id en wrangler.toml (caché permanente de guías)
    npx wrangler deploy        # te da la URL → EXPO_PUBLIC_API_URL
    ```
-   Recomendado: una regla de *rate limiting* en Cloudflare para `/v1/recommend` y `/v1/guide`,
-   que son las rutas que cuestan dinero.
+   Recomendado: una regla de *rate limiting* en Cloudflare para `/v1/guide`, la ruta que cuesta dinero.
 
 Sin backend la app sigue funcionando: alta manual de lugares y tiempos estimados por distancia.
 

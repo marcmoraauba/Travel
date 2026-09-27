@@ -89,32 +89,6 @@ export async function routeGeometry(points: LatLng[], mode: TransportMode): Prom
 
 // ——— IA ———
 
-export interface Suggestion {
-  name: string;
-  category: string;
-  reason: string;
-  visitMinutes: number;
-  priority: 'must' | 'optional';
-  /** Resultado del mapa que casa con la sugerencia; null = no se ha podido ubicar con confianza. */
-  match: SearchResult | null;
-}
-
-export async function recommendPlaces(input: {
-  city: string;
-  lat: number;
-  lng: number;
-  days: number;
-  request: string;
-  existing: string[];
-}): Promise<Suggestion[]> {
-  const data = await request<{ suggestions: Suggestion[] }>(
-    '/v1/recommend',
-    { method: 'POST', body: JSON.stringify({ ...input, lang: 'es' }) },
-    90_000,
-  );
-  return data.suggestions;
-}
-
 export async function fetchGuideText(input: {
   name: string;
   city: string;

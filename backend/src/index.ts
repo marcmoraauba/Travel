@@ -26,7 +26,7 @@ export interface Point {
   lng: number;
 }
 
-import { generateGuide, recommendPlaces } from './ai';
+import { generateGuide } from './ai';
 import { HttpError, sha256 } from './http';
 
 const MAPBOX = 'https://api.mapbox.com';
@@ -248,10 +248,6 @@ export default {
       if (request.method === 'GET' && url.pathname === '/v1/search') {
         url.searchParams.sort();
         return await cached(`https://cache.travel/search?${url.searchParams}`, ctx, () => search(url, env));
-      }
-      if (request.method === 'POST' && url.pathname === '/v1/recommend') {
-        const { body } = await readJson(request);
-        return json(await recommendPlaces(env, body, (q, near) => searchMapbox(env, { q, kind: 'poi', near, limit: 3 })));
       }
       if (request.method === 'POST' && url.pathname === '/v1/guide') {
         const { body } = await readJson(request);

@@ -108,12 +108,6 @@ export default function TripScreen() {
         <Button title="Añadir lugar" onPress={() => router.push(`/trip/${trip.id}/add-place`)} style={{ flex: 1 }} />
         <Button title="Editar" variant="secondary" onPress={() => router.push(`/trip/new?id=${trip.id}`)} />
       </View>
-      <Button
-        title="Sugerencias de la IA"
-        variant="secondary"
-        onPress={() => router.push(`/trip/${trip.id}/suggest`)}
-        style={{ marginTop: space.sm }}
-      />
 
       {unassigned.length > 0 ? (
         <>

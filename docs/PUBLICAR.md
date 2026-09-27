@@ -103,13 +103,12 @@ npx eas-cli@latest build --profile production --platform all
 4. **Privacidad de la app** (etiquetas "nutricionales"). Con el comportamiento actual, respuesta prudente:
    - *Ubicación → Ubicación aproximada*: recopilada, **no vinculada** a la identidad, **no** usada para rastreo, finalidad "Funcionalidad de la app".
    - *Búsquedas*: igual (no vinculadas, sin rastreo, funcionalidad).
-   - *Otro contenido del usuario* (lo que escribe al pedir sugerencias a la IA): igual.
    - Sin cuentas, sin analítica, sin publicidad.
 5. **Cifrado**: `app.json` ya declara `usesNonExemptEncryption: false` (solo HTTPS), así que no te
    lo preguntará en cada build.
 6. **Notas para el revisor**: explica que no hay cuenta, y cómo probar: *"Crear viaje → busca
-   'Roma' → Sugerencias de la IA → añade las propuestas → abre Día 1 → ▶ Guía en cualquier parada"*.
-   Menciona que las sugerencias y guías se generan con IA (Claude, de Anthropic).
+   'Roma' → añade 'Coliseo', 'Panteón' y 'Fontana di Trevi' → abre Día 1 → ▶ Guía en cualquier parada"*.
+   Menciona que las guías se generan con IA (Claude, de Anthropic).
 7. **Enviar a revisión.** Suele tardar entre 1 y 3 días.
 
 ---

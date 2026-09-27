@@ -126,7 +126,6 @@ export default function PlaceScreen() {
             style={{ marginBottom: space.md }}
           />
         ) : null}
-        {place.origin === 'ai' && place.notes ? <Muted style={{ marginBottom: space.md }}>Sugerido por la IA: {place.notes}</Muted> : null}
         <Field label="Nombre" value={name} onChangeText={setName} />
 
         {location ? (
