@@ -1,0 +1,8 @@
+name = "travel-api"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+# Secretos (no van aquí):
+#   npx wrangler secret put MAPBOX_TOKEN
+#   npx wrangler secret put APP_KEY        (opcional)
+# En local: crea backend/.dev.vars con MAPBOX_TOKEN=sk....
