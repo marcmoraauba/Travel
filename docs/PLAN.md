@@ -1,7 +1,8 @@
 # Travel — Planificador de rutas urbanas con IA
 
-Documento de planteamiento. Versión 1 — 31/08/2026.
-Nada de esto está construido todavía; es el acuerdo previo al desarrollo.
+Documento de planteamiento. Versión 2 — 27/09/2026.
+Versión 1 (31/08/2026): acuerdo previo al desarrollo. Versión 2: F0–F4 construidas; se descarta la
+recomendación de lugares por IA (ver §5b) y se fija la voz del sistema para la guía (ver §6).
 
 ---
 
@@ -11,7 +12,7 @@ Una app móvil donde el flujo es:
 
 **Viaje → Días → Lugares → Ruta optimizada → Guía narrada**
 
-El usuario mete los sitios que quiere ver en una ciudad —a mano o pidiéndoselos a la IA— y la app
+El usuario mete los sitios que quiere ver en una ciudad —con el buscador o a mano— y la app
 decide *en qué orden y a qué hora*
 visitarlos para aprovechar el día, respetando horarios de apertura y tiempos reales de
 desplazamiento. Al llegar a cada sitio, tiene una explicación lista para leer o escuchar.
@@ -24,6 +25,8 @@ desplazamiento. Al llegar a cada sitio, tiene una explicación lista para leer o
 | Stack | Expo / React Native + TypeScript | iOS y Android con un código; probable en móvil propio desde la primera semana |
 | Mapas y lugares | Mapbox + OpenStreetMap | Coste bajo; sin transporte público; horarios OSM irregulares (ver §7) |
 | MVP | Ruta óptima primero | La guía IA entra en la fase 4 |
+| IA | Solo para la guía narrada | Sin recomendación de lugares: el coste de IA no crece con cada petición (ver §5b) |
+| Voz | La del sistema (`expo-speech`) | Gratis y sin conexión; la voz neuronal queda para después |
 
 ## 3. Arquitectura
 
@@ -61,7 +64,7 @@ Day         id, trip_id, fecha, hora_inicio, hora_fin, notas
 Place       id, trip_id, nombre, coords, categoría, duración_visita_min,
             prioridad (imprescindible|opcional), horarios, precio, requiere_reserva,
             fuente_horarios (osm|manual|ia_sin_verificar),
-            origen (manual|busqueda|recomendacion_ia), geocodificado (sí|no)
+            origen (manual|busqueda), geocodificado (sí|no)
 DayStop     id, day_id, place_id, orden, hora_llegada, hora_salida, min_desplazamiento
 Booking     id, place_id, hora_fija, referencia          ← ancla dura en la optimización
 Guide       place_id, idioma, longitud (30s|2min|5min), texto, audio_path, generado_en
@@ -101,35 +104,39 @@ Con 25 lugares y 3 días, primero se **agrupan por zonas geográficas** y se asi
 Repartir lugares sueltos hace cruzar la ciudad dos veces; repartir zonas, no.
 
 ### Papel de la IA aquí
-- Traduce lenguaje natural a restricciones: *"el domingo tranquilo y comiendo por el centro"*.
-- Estima duración de visita cuando no hay dato.
-- Explica el resultado: *"te pongo la Sagrada Família a primera hora porque a mediodía la cola se dispara"*.
-- Propone lugares nuevos que encajan en un hueco de la ruta.
+Hoy ninguno: el optimizador es solo algoritmo, y la duración de visita la pone el usuario (con un
+valor por defecto según la categoría). Ideas por si se retoma, ninguna implementada:
+- Traducir lenguaje natural a restricciones: *"el domingo tranquilo y comiendo por el centro"*.
+- Estimar la duración de visita cuando no hay dato.
+- Explicar el resultado: *"te pongo la Sagrada Família a primera hora porque a mediodía la cola se dispara"*.
+
+Cualquiera de ellas se valoraría con el mismo criterio que §5b: cuánto cuesta por petición y si
+se puede cachear.
 
 ### Límite técnico conocido
 La Matrix API de Mapbox admite un número acotado de coordenadas por petición (del orden de 25 para
 a pie y coche). Un día real rara vez pasa de 12 paradas, así que no molesta; para multi-día se
 trocea por zonas. Se confirma con la documentación vigente antes de implementar.
 
-## 5b. De recomendación de IA a lugar enrutable
+## 5b. Recomendación de lugares por IA — descartada
 
-Cuando pides *"los imprescindibles de Roma en 3 días"*, la IA devuelve nombres, no puntos del mapa.
-Un nombre no se puede optimizar. El puente entre las dos cosas:
+Se llegó a construir (la IA proponía lugares y el backend los situaba en Mapbox, dejando aparte los
+que no casaban con confianza) y se retiró el 27/09/2026. Motivos:
 
-1. La IA propone lugares con nombre, categoría, motivo y duración estimada de visita.
-2. Cada nombre se **geocodifica contra Mapbox** para obtener coordenadas reales y, con ellas,
-   los datos de OSM (horarios, tipo de sitio).
-3. Lo que no geocodifica con confianza suficiente se le presenta al usuario para que lo resuelva
-   o lo descarte, en vez de colarse en la ruta con una posición inventada.
-4. Solo los lugares con coordenadas verificadas entran en el optimizador.
+- **Coste que crece con el uso.** Cada petición de sugerencias es distinta y no se puede cachear:
+  unos 0,09 USD por petición, que con 1.000 usuarios activos rondan los 180 USD/mes.
+- **Riesgo de abuso.** Es la ruta más fácil de explotar a costa de la cuenta del backend.
+- **No es el núcleo.** El valor de la app está en ordenar y programar el día y en la guía; los
+  lugares se añaden bien con el buscador.
 
-Esto también sirve para el caso *"añade algo por la zona a media tarde"*: la IA propone
-conociendo el hueco disponible y la ubicación, y el resultado pasa por el mismo filtro.
+Si se retoma, necesitaría límites por dispositivo o cuenta (fase 6) o ser una función de pago.
 
 ## 6. La guía narrada
 
 - Tres longitudes por lugar: **30 s** (llegada rápida), **2 min** (estándar), **5 min** (a fondo).
-- Modo lectura y modo recitado (texto a voz del sistema; voz de más calidad, evaluable después).
+- Modo lectura y modo recitado con la **voz del sistema** (`expo-speech`), párrafo a párrafo para que
+  pausar y reanudar funcione igual en iOS y Android. La voz neuronal (MP3 pregenerado en el backend,
+  columna `guides.audio_path`) queda para después si la del sistema se queda corta.
 - **Se genera y descarga al preparar el viaje, no al llegar.** En destino puede no haber datos, y
   esperar a que se genere un texto delante de un monumento arruina el momento.
 - Caché en el backend por (lugar, idioma, longitud): se genera una vez y sirve siempre.
@@ -144,15 +151,14 @@ Los horarios, precios y reservas **nunca** se generan con IA sin marcarlos como 
 |---|---|
 | Mapbox no enruta en transporte público | Proveedor de rutas desacoplado tras una interfaz. A pie cubre los centros históricos; se enchufa un proveedor de transporte público más adelante sin tocar el motor |
 | Horarios OSM incompletos | Parser de `opening_hours`, edición manual siempre visible, relleno IA marcado como *sin verificar* |
-| Coste de IA al abrir a público | Caché compartida desde el día 1; límites por usuario en la fase 6 |
+| Coste de IA al abrir a público | La IA solo genera guías, cacheadas por lugar y compartidas: se pagan una vez (~0,10 USD por lugar). Límite de gasto en la consola de Anthropic y *rate limiting* en Cloudflare |
 | Batería con GPS en segundo plano | Geofencing nativo (no polling continuo), y desactivable |
 | Datos de POI turísticos pobres en OSM | Alta manual y por pegado de enlace siempre disponibles como vía de escape |
 
 ## 8. Fases
 
 **F0 — Esqueleto.** Proyecto Expo, navegación, mapa Mapbox, SQLite, modelo de datos.
-**F1 — Viajes y lugares.** Crear viaje; añadir lugares de tres formas: a mano, por buscador, y
-por recomendación de la IA (con la verificación de §5b); ficha editable, lista por días.
+**F1 — Viajes y lugares.** Crear viaje; añadir lugares por buscador o a mano; ficha editable, lista por días.
 **F2 — Motor de rutas.** Optimizador con tests, matriz Mapbox, vista timeline + mapa del día. *Aquí ya es útil en un viaje real.*
 **F3 — Multi-día y en ruta.** Agrupación por zonas, recálculo sobre la marcha ("voy tarde").
 **F4 — Guía IA.** Backend proxy + caché, generación de textos, voz, descarga offline.
@@ -170,4 +176,4 @@ Las tarifas vigentes se verifican antes de comprometer nada.
 ## 10. Fuera de alcance por ahora
 
 Reservas y compra de entradas dentro de la app, vuelos y hoteles, red social o compartir público
-de rutas, traducción en tiempo real, realidad aumentada.
+de rutas, traducción en tiempo real, realidad aumentada, recomendación de lugares por IA (§5b).

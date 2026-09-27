@@ -80,6 +80,10 @@ Sin backend la app sigue funcionando: alta manual de lugares y tiempos estimados
 | `npm run lint` | ESLint (config de Expo) |
 | `npx expo start` | Servidor de desarrollo para el development build |
 
+## Probar en tu móvil
+
+Paso a paso y lista de comprobación en **[`docs/PROBAR.md`](docs/PROBAR.md)**.
+
 ## Publicar en App Store y Google Play
 
 Paso a paso en **[`docs/PUBLICAR.md`](docs/PUBLICAR.md)**.
