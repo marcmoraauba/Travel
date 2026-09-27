@@ -66,6 +66,7 @@ export interface DayStop {
   departure: string;
   travelMinutes: number;
   waitMinutes: number;
+  visited: boolean;
 }
 
 export interface Booking {
@@ -75,4 +76,16 @@ export interface Booking {
   date: string;
   time: string;
   reference: string;
+}
+
+export type GuideLength = 'short' | 'standard' | 'long';
+
+export interface Guide {
+  placeId: string;
+  language: string;
+  length: GuideLength;
+  text: string;
+  /** Reservado para audio pregenerado (voz neuronal). Hoy se narra con la voz del sistema. */
+  audioPath: string | null;
+  generatedAt: string;
 }

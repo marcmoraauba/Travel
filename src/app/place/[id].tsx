@@ -3,6 +3,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, Switch, View } from 'react-native';
 import { dayLabel } from '../../components/format';
+import { PickerField } from '../../components/PickerField';
 import { PlaceSearch } from '../../components/PlaceSearch';
 import { Badge, Button, Card, Field, Muted, SectionTitle, Segmented, Title } from '../../components/ui';
 import { parseOpeningHours } from '../../core/openingHours';
@@ -117,6 +118,15 @@ export default function PlaceScreen() {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Stack.Screen options={{ title: place.name }} />
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
+        {location ? (
+          <Button
+            title="Guía narrada"
+            variant="secondary"
+            onPress={() => router.push(`/guide/${place.id}`)}
+            style={{ marginBottom: space.md }}
+          />
+        ) : null}
+        {place.origin === 'ai' && place.notes ? <Muted style={{ marginBottom: space.md }}>Sugerido por la IA: {place.notes}</Muted> : null}
         <Field label="Nombre" value={name} onChangeText={setName} />
 
         {location ? (
@@ -185,7 +195,7 @@ export default function PlaceScreen() {
             <Muted style={{ marginBottom: space.md }}>
               La ruta del día se construye alrededor de esta hora. {bookingDay ? '' : 'Asigna antes un día al lugar.'}
             </Muted>
-            <Field label="Hora" value={bookingTime} onChangeText={setBookingTime} placeholder="HH:MM" keyboardType="numbers-and-punctuation" />
+            <PickerField label="Hora" mode="time" value={bookingTime} onChange={setBookingTime} />
             <Field label="Localizador (opcional)" value={bookingRef} onChangeText={setBookingRef} autoCapitalize="characters" />
           </>
         ) : null}

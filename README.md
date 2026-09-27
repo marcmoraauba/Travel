@@ -3,17 +3,18 @@
 App móvil (iOS y Android) que decide **en qué orden y a qué hora** visitar los sitios de un viaje,
 respetando horarios de apertura, reservas y tiempos reales de desplazamiento.
 
-**Viaje → Días → Lugares → Ruta optimizada** (la guía narrada con IA llega en la fase 4, ver [`docs/PLAN.md`](docs/PLAN.md)).
+**Viaje → Días → Lugares → Ruta optimizada → Guía narrada** (ver [`docs/PLAN.md`](docs/PLAN.md)).
 
 ## Estado
 
 | Fase | Contenido | Estado |
 |---|---|---|
 | F0 | Expo + Expo Router, SQLite, modelo de datos, mapa Mapbox | ✅ |
-| F1 | Viajes, lugares (buscador y alta manual), ficha editable, lista por días | ✅ (falta la recomendación por IA) |
+| F1 | Viajes, lugares (buscador, alta manual y sugerencias de la IA con verificación en mapa) | ✅ |
 | F2 | Optimizador con tests, matriz Mapbox, horario + mapa del día | ✅ |
-| F3 | Reparto multi-día por zonas | ✅ · recálculo "voy tarde": pendiente |
-| F4–F6 | Guía IA, vida en destino, cuentas | pendiente |
+| F3 | Reparto multi-día por zonas, "voy tarde" (recalcular el resto del día desde ahora) | ✅ |
+| F4 | Guía narrada: textos de Claude cacheados en el backend, descarga offline, voz del sistema | ✅ (voz neuronal: pendiente) |
+| F5–F6 | Avisos por geolocalización, presupuesto, cuentas | pendiente |
 | Tiendas | Config EAS, permisos, iconos, privacidad, guía de publicación | ✅ listo para el primer build |
 
 ## Estructura
@@ -56,13 +57,18 @@ npx expo start
 1. **Mapbox** ([account.mapbox.com](https://account.mapbox.com)):
    - Token **público** (`pk.…`) → `EXPO_PUBLIC_MAPBOX_TOKEN` (pinta el mapa).
    - Token **secreto** (`sk.…`) con permisos de Search y Directions/Matrix → solo en el Worker.
-2. **Cloudflare** (gratis) para el backend:
+2. **Claude API** ([console.anthropic.com](https://console.anthropic.com)): clave para sugerencias y guías → solo en el Worker.
+3. **Cloudflare** (gratis) para el backend:
    ```bash
    cd backend && npm install
    npx wrangler login
    npx wrangler secret put MAPBOX_TOKEN
+   npx wrangler secret put ANTHROPIC_API_KEY
+   npx wrangler kv namespace create GUIDES   # pega el id en wrangler.toml (caché permanente de guías)
    npx wrangler deploy        # te da la URL → EXPO_PUBLIC_API_URL
    ```
+   Recomendado: una regla de *rate limiting* en Cloudflare para `/v1/recommend` y `/v1/guide`,
+   que son las rutas que cuestan dinero.
 
 Sin backend la app sigue funcionando: alta manual de lugares y tiempos estimados por distancia.
 

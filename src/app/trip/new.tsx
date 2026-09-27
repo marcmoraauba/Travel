@@ -3,10 +3,11 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { PickerField } from '../../components/PickerField';
 import { PlaceSearch } from '../../components/PlaceSearch';
-import { Badge, Button, Card, Field, Muted, Segmented, Title } from '../../components/ui';
+import { Badge, Button, Card, Muted, Segmented, Title } from '../../components/ui';
 import type { TransportMode } from '../../core/geo';
-import { datesBetween, parseISODate, toISODate } from '../../core/time';
+import { datesBetween, localISODate, parseISODate } from '../../core/time';
 import { createTrip, getTrip, updateTrip } from '../../db/repo';
 import type { Pace } from '../../db/types';
 import { space } from '../../theme';
@@ -22,7 +23,7 @@ const MAX_DAYS = 21;
 export default function TripFormScreen() {
   const db = useSQLiteContext();
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const today = toISODate(new Date());
+  const today = localISODate(new Date());
 
   const [city, setCity] = useState<Point | null>(null);
   const [base, setBase] = useState<Point | null>(null);
@@ -119,8 +120,17 @@ export default function TripFormScreen() {
           </>
         )}
 
-        <Field label="Primer día" value={startDate} onChangeText={setStartDate} placeholder="AAAA-MM-DD" keyboardType="numbers-and-punctuation" />
-        <Field label="Último día" value={endDate} onChangeText={setEndDate} placeholder="AAAA-MM-DD" keyboardType="numbers-and-punctuation" />
+        <PickerField
+          label="Primer día"
+          mode="date"
+          value={startDate}
+          onChange={(d) => {
+            setStartDate(d);
+            // Si el inicio pasa del fin, el fin le sigue.
+            if (d > endDate) setEndDate(d);
+          }}
+        />
+        <PickerField label="Último día" mode="date" value={endDate} minimumDate={startDate} onChange={setEndDate} />
 
         <Segmented
           label="Ritmo"

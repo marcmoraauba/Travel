@@ -1,5 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { assignPlacesToDays } from '../core/clustering';
+import type { LatLng } from '../core/geo';
 import { weekdayIndex, parseHHMM } from '../core/time';
 import { parseOpeningHours } from '../core/openingHours';
 import { optimizeDay, DayPlan } from '../core/optimizer';
@@ -80,4 +81,41 @@ export async function distributeTrip(db: SQLiteDatabase, tripId: string, all = f
   for (const d of days) {
     await optimizeAndSaveDay(db, d.id);
   }
+}
+
+/**
+ * "Voy tarde": mantiene las paradas marcadas como hechas y reoptimiza el resto del día
+ * desde la hora actual y, si se conoce, desde donde está el viajero.
+ */
+export async function replanRestOfDay(
+  db: SQLiteDatabase,
+  dayId: string,
+  now: number,
+  position: LatLng | null,
+): Promise<OptimizeResult> {
+  const day = await repo.getDay(db, dayId);
+  if (!day) throw new Error('Día no encontrado');
+  const trip = await repo.getTrip(db, day.tripId);
+  if (!trip) throw new Error('Viaje no encontrado');
+
+  const stops = await repo.listStops(db, dayId);
+  const done = stops.filter((s) => s.visited);
+  const doneIds = new Set(done.map((s) => s.placeId));
+  const places = (await repo.listPlaces(db, trip.id)).filter((p) => p.dayId === dayId);
+  const pending = places.filter(isRoutable).filter((p) => !doneIds.has(p.id));
+  const unlocated = places.filter((p) => !isRoutable(p)).map((p) => p.name);
+
+  // Sin GPS: se sale del último sitio visitado (o del alojamiento si aún no se ha visitado nada).
+  const lastDone = [...done].reverse().map((s) => places.find((p) => p.id === s.placeId)).find((p) => p && isRoutable(p));
+  const origin = position ?? (lastDone && isRoutable(lastDone) ? { lat: lastDone.lat, lng: lastDone.lng } : undefined);
+
+  const bookings = await repo.listBookings(db, trip.id);
+  const { minutes, source } = await travelMatrix(matrixPoints(trip, pending, origin), trip.transportMode);
+  const plan = optimizeDay(buildDayInput(trip, day, pending, bookings, minutes, { startAt: now }));
+
+  await repo.replaceStops(db, dayId, [
+    ...done.map((s, i) => ({ ...s, position: i, visited: true })),
+    ...planToStops(plan, done.length),
+  ]);
+  return { plan, matrixSource: source, unlocated };
 }

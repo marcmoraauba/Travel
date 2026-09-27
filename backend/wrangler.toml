@@ -4,5 +4,13 @@ compatibility_date = "2026-09-01"
 
 # Secretos (no van aquí):
 #   npx wrangler secret put MAPBOX_TOKEN
+#   npx wrangler secret put ANTHROPIC_API_KEY
 #   npx wrangler secret put APP_KEY        (opcional)
-# En local: crea backend/.dev.vars con MAPBOX_TOKEN=sk....
+# En local: crea backend/.dev.vars con MAPBOX_TOKEN=sk.... y ANTHROPIC_API_KEY=...
+
+# Caché permanente de guías (una guía por lugar/idioma/longitud, compartida por todos).
+# 1) npx wrangler kv namespace create GUIDES
+# 2) descomenta y pega el id que te devuelve:
+# [[kv_namespaces]]
+# binding = "GUIDES"
+# id = "<id>"

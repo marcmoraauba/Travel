@@ -43,6 +43,17 @@ export function toISODate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** Fecha de calendario en la zona horaria del dispositivo ("hoy" para el viajero). */
+export function localISODate(date: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
+}
+
+/** Minutos desde medianoche en hora local. */
+export function localMinutes(date: Date): Minutes {
+  return date.getHours() * 60 + date.getMinutes();
+}
+
 /** Todas las fechas entre inicio y fin, ambas incluidas. */
 export function datesBetween(startISO: string, endISO: string): string[] {
   const start = parseISODate(startISO);

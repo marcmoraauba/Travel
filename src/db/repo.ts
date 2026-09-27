@@ -1,7 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { datesBetween } from '../core/time';
-import type { Booking, Day, DayStop, Place, Trip } from './types';
+import type { Booking, Day, DayStop, Guide, GuideLength, Place, Trip } from './types';
 
 /** Acceso a datos. Todas las funciones reciben la BD para poder testearlas y usarlas fuera de React. */
 
@@ -66,6 +66,7 @@ const toStop = (r: Row): DayStop => ({
   departure: r.departure as string,
   travelMinutes: r.travel_minutes as number,
   waitMinutes: r.wait_minutes as number,
+  visited: Boolean(r.visited),
 });
 
 const toBooking = (r: Row): Booking => ({
@@ -242,24 +243,66 @@ export async function listStops(db: SQLiteDatabase, dayId: string): Promise<DayS
 export async function replaceStops(
   db: SQLiteDatabase,
   dayId: string,
-  stops: Omit<DayStop, 'id' | 'dayId'>[],
+  stops: (Omit<DayStop, 'id' | 'dayId' | 'visited'> & { visited?: boolean })[],
 ): Promise<void> {
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM day_stops WHERE day_id = ?', dayId);
     for (const s of stops) {
       await db.runAsync(
-        `INSERT INTO day_stops (id, day_id, place_id, position, arrival, start, departure, travel_minutes, wait_minutes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO day_stops (id, day_id, place_id, position, arrival, start, departure, travel_minutes, wait_minutes, visited)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         uuid(), dayId, s.placeId, s.position, s.arrival, s.start, s.departure, s.travelMinutes, s.waitMinutes,
+        s.visited ? 1 : 0,
       );
     }
     await db.runAsync('UPDATE days SET optimized_at = ? WHERE id = ?', now(), dayId);
   });
 }
 
+export async function setStopVisited(db: SQLiteDatabase, stopId: string, visited: boolean): Promise<void> {
+  await db.runAsync('UPDATE day_stops SET visited = ? WHERE id = ?', visited ? 1 : 0, stopId);
+}
+
 export async function clearStops(db: SQLiteDatabase, dayId: string): Promise<void> {
   await db.runAsync('DELETE FROM day_stops WHERE day_id = ?', dayId);
   await db.runAsync('UPDATE days SET optimized_at = NULL WHERE id = ?', dayId);
+}
+
+// ——— Guías ———
+
+const toGuide = (r: Row): Guide => ({
+  placeId: r.place_id as string,
+  language: r.language as string,
+  length: r.length as GuideLength,
+  text: r.text as string,
+  audioPath: (r.audio_path as string | null) ?? null,
+  generatedAt: r.generated_at as string,
+});
+
+export async function getGuide(db: SQLiteDatabase, placeId: string, language: string, length: GuideLength): Promise<Guide | null> {
+  const r = await db.getFirstAsync<Row>(
+    'SELECT * FROM guides WHERE place_id = ? AND language = ? AND length = ?',
+    placeId, language, length,
+  );
+  return r ? toGuide(r) : null;
+}
+
+/** Ids de lugares del viaje que ya tienen guardada una guía de esa longitud. */
+export async function placesWithGuide(db: SQLiteDatabase, tripId: string, language: string, length: GuideLength): Promise<Set<string>> {
+  const rows = await db.getAllAsync<{ place_id: string }>(
+    `SELECT g.place_id FROM guides g JOIN places p ON p.id = g.place_id
+     WHERE p.trip_id = ? AND g.language = ? AND g.length = ?`,
+    tripId, language, length,
+  );
+  return new Set(rows.map((r) => r.place_id));
+}
+
+export async function saveGuide(db: SQLiteDatabase, g: Omit<Guide, 'generatedAt' | 'audioPath'>): Promise<void> {
+  await db.runAsync(
+    `INSERT INTO guides (place_id, language, length, text, audio_path, generated_at) VALUES (?, ?, ?, ?, NULL, ?)
+     ON CONFLICT(place_id, language, length) DO UPDATE SET text = excluded.text, generated_at = excluded.generated_at`,
+    g.placeId, g.language, g.length, g.text, now(),
+  );
 }
 
 /** Borra todos los datos locales (Ajustes → "Borrar mis datos"; lo exigen las tiendas). */

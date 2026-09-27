@@ -1,15 +1,18 @@
+import * as Location from 'expo-location';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { DayMap } from '../../components/DayMap';
+import { PickerField } from '../../components/PickerField';
 import { dayLabel } from '../../components/format';
 import { useData } from '../../components/useData';
-import { Button, Field, Muted, Notice, SectionTitle } from '../../components/ui';
+import { Button, Muted, Notice, SectionTitle } from '../../components/ui';
 import type { DayPlan } from '../../core/optimizer';
 import { DROP_REASON_TEXT, isRoutable, tripBase } from '../../core/planning';
-import { formatDuration, formatHHMM, parseHHMM } from '../../core/time';
+import { haversineMeters } from '../../core/geo';
+import { formatDuration, formatHHMM, localISODate, localMinutes, parseHHMM } from '../../core/time';
 import * as repo from '../../db/repo';
-import { optimizeAndSaveDay } from '../../services/planner';
+import { optimizeAndSaveDay, replanRestOfDay } from '../../services/planner';
 import { radius, space, useColors } from '../../theme';
 
 const MODE_TEXT = { walking: 'a pie', cycling: 'en bici', driving: 'en coche' } as const;
@@ -58,6 +61,41 @@ export default function DayScreen() {
     }
   };
 
+  /** Posición actual si hay permiso y es razonable (en la ciudad del viaje); si no, null. */
+  const currentPosition = async (near: { lat: number; lng: number }) => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return null;
+      const pos =
+        (await Location.getLastKnownPositionAsync({ maxAge: 5 * 60_000 })) ??
+        (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
+      const here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      return haversineMeters(here, near) < 50_000 ? here : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const replanFromNow = async () => {
+    if (!data?.trip) return;
+    setBusy(true);
+    try {
+      const here = await currentPosition(tripBase(data.trip));
+      const r = await replanRestOfDay(db, id, localMinutes(new Date()), here);
+      setLastRun({ plan: r.plan, estimated: r.matrixSource === 'estimate', unlocated: r.unlocated });
+      reload();
+    } catch (e) {
+      Alert.alert('No se pudo recalcular', String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleVisited = async (stopId: string, visited: boolean) => {
+    await repo.setStopVisited(db, stopId, visited);
+    reload();
+  };
+
   // Primera visita a un día con lugares sin ruta: se calcula sola.
   useEffect(() => {
     if (!data?.day || autoRan.current) return;
@@ -83,6 +121,7 @@ export default function DayScreen() {
     await optimize();
   };
 
+  const isToday = day.date === localISODate(new Date());
   const byId = new Map(places.map((p) => [p.id, p]));
   const inRoute = new Set(stops.map((s) => s.placeId));
   const notInRoute = places.filter((p) => isRoutable(p) && !inRoute.has(p.id));
@@ -105,10 +144,10 @@ export default function DayScreen() {
 
       <View style={{ flexDirection: 'row', gap: space.sm, alignItems: 'flex-end' }}>
         <View style={{ flex: 1 }}>
-          <Field label="Empiezo" value={startTime} onChangeText={setStartTime} keyboardType="numbers-and-punctuation" />
+          <PickerField label="Empiezo" mode="time" value={startTime} onChange={setStartTime} />
         </View>
         <View style={{ flex: 1 }}>
-          <Field label="Termino" value={endTime} onChangeText={setEndTime} keyboardType="numbers-and-punctuation" />
+          <PickerField label="Termino" mode="time" value={endTime} onChange={setEndTime} />
         </View>
       </View>
       {startTime !== day.startTime || endTime !== day.endTime ? (
@@ -116,6 +155,20 @@ export default function DayScreen() {
       ) : (
         <Button title={stops.length ? 'Recalcular ruta' : 'Calcular ruta'} onPress={optimize} loading={busy} disabled={!places.some(isRoutable)} />
       )}
+      {isToday && stops.length > 0 ? (
+        <>
+          <Button
+            title="Voy tarde · recalcular desde ahora"
+            variant="secondary"
+            onPress={replanFromNow}
+            loading={busy}
+            style={{ marginTop: space.sm }}
+          />
+          <Muted style={{ marginTop: space.xs, fontSize: 12 }}>
+            Marca con ✓ lo que ya has visto: se mantiene y el resto se reordena desde donde estás.
+          </Muted>
+        </>
+      ) : null}
 
       {lastRun?.estimated ? (
         <Notice>Tiempos estimados sin conexión. Recalcula con red para usar tiempos reales.</Notice>
@@ -136,9 +189,14 @@ export default function DayScreen() {
             const prevEnd = i === 0 ? parseHHMM(day.startTime)! : parseHHMM(stops[i - 1].departure)!;
             const leaveAt = parseHHMM(s.arrival)! - s.travelMinutes;
             const pause = leaveAt - prevEnd;
+            // Tras una parada ya hecha, el hueco es el retraso real, no una pausa planificada.
+            const showPause = pause > 0 && !(i > 0 && stops[i - 1].visited);
+            const isLunch = prevEnd >= 12 * 60 + 30 && prevEnd <= 15 * 60 + 30 && pause >= 30;
             return (
-              <View key={s.id}>
-                {pause > 0 ? <TimelineRow time={formatHHMM(prevEnd)} title={`Comida · ${formatDuration(pause)}`} subtle /> : null}
+              <View key={s.id} style={{ opacity: s.visited ? 0.5 : 1 }}>
+                {showPause ? (
+                  <TimelineRow time={formatHHMM(prevEnd)} title={`${isLunch ? 'Comida' : 'Pausa'} · ${formatDuration(pause)}`} subtle />
+                ) : null}
                 <Leg text={`${formatDuration(s.travelMinutes)} ${MODE_TEXT[trip.transportMode]}`} />
                 {s.waitMinutes > 0 ? <Leg text={`Esperar ${formatDuration(s.waitMinutes)} a que abra`} warn /> : null}
                 <Pressable accessibilityRole="button" onPress={() => p && router.push(`/place/${p.id}`)}>
@@ -149,6 +207,21 @@ export default function DayScreen() {
                     detail={`hasta las ${s.departure}${p?.priority === 'must' ? ' · imprescindible' : ''}`}
                   />
                 </Pressable>
+                <View style={{ flexDirection: 'row', gap: space.lg, marginLeft: 56 + 28 + space.sm, marginBottom: space.xs }}>
+                  <Pressable
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: s.visited }}
+                    onPress={() => toggleVisited(s.id, !s.visited)}
+                    hitSlop={8}
+                  >
+                    <Text style={{ color: c.primary, fontWeight: '600' }}>{s.visited ? '✓ Hecho' : 'Marcar hecho'}</Text>
+                  </Pressable>
+                  {p && isRoutable(p) ? (
+                    <Pressable accessibilityRole="button" onPress={() => router.push(`/guide/${p.id}`)} hitSlop={8}>
+                      <Text style={{ color: c.primary, fontWeight: '600' }}>▶ Guía</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
               </View>
             );
           })}

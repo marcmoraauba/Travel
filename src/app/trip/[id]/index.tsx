@@ -6,6 +6,7 @@ import { useData } from '../../../components/useData';
 import { Badge, Button, Card, Muted, Notice, SectionTitle, Title } from '../../../components/ui';
 import { deleteTrip, getTrip, listDays, listPlaces } from '../../../db/repo';
 import type { Place } from '../../../db/types';
+import { guideCoverage, prepareTripGuides } from '../../../services/guides';
 import { distributeTrip } from '../../../services/planner';
 import { space, useColors } from '../../../theme';
 
@@ -39,16 +40,22 @@ function PlaceRow({ place }: { place: Place }) {
 export default function TripScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [busy, setBusy] = useState(false);
+  const [guideProgress, setGuideProgress] = useState<{ done: number; total: number } | null>(null);
   const { data, reload, db } = useData(
     async (db) => {
-      const [trip, days, places] = await Promise.all([getTrip(db, id), listDays(db, id), listPlaces(db, id)]);
-      return { trip, days, places };
+      const [trip, days, places, guides] = await Promise.all([
+        getTrip(db, id),
+        listDays(db, id),
+        listPlaces(db, id),
+        guideCoverage(db, id),
+      ]);
+      return { trip, days, places, guides };
     },
     id,
   );
 
   if (!data) return null;
-  const { trip, days, places } = data;
+  const { trip, days, places, guides } = data;
   if (!trip) return <Muted style={{ padding: space.lg }}>Este viaje ya no existe.</Muted>;
 
   const unassigned = places.filter((p) => p.dayId === null);
@@ -62,6 +69,21 @@ export default function TripScreen() {
       Alert.alert('No se pudo planificar', String(e));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const downloadGuides = async () => {
+    setGuideProgress({ done: 0, total: 0 });
+    try {
+      const r = await prepareTripGuides(db, trip.id, (done, total) => setGuideProgress({ done, total }));
+      if (r.failed > 0) {
+        Alert.alert('Guías incompletas', `No se pudieron descargar ${r.failed} de ${r.total}. Vuelve a intentarlo con conexión.`);
+      }
+      reload();
+    } catch (e) {
+      Alert.alert('No se pudieron descargar las guías', e instanceof Error ? e.message : String(e));
+    } finally {
+      setGuideProgress(null);
     }
   };
 
@@ -86,6 +108,12 @@ export default function TripScreen() {
         <Button title="Añadir lugar" onPress={() => router.push(`/trip/${trip.id}/add-place`)} style={{ flex: 1 }} />
         <Button title="Editar" variant="secondary" onPress={() => router.push(`/trip/new?id=${trip.id}`)} />
       </View>
+      <Button
+        title="Sugerencias de la IA"
+        variant="secondary"
+        onPress={() => router.push(`/trip/${trip.id}/suggest`)}
+        style={{ marginTop: space.sm }}
+      />
 
       {unassigned.length > 0 ? (
         <>
@@ -123,6 +151,30 @@ export default function TripScreen() {
 
       {places.length > 0 && unassigned.length === 0 && days.length > 1 ? (
         <Button title="Volver a repartir todo" variant="secondary" loading={busy} onPress={() => distribute(true)} />
+      ) : null}
+
+      {guides.total > 0 ? (
+        <>
+          <SectionTitle right={<Badge text={`${guides.ready}/${guides.total}`} tone={guides.ready === guides.total ? 'primary' : 'warning'} />}>
+            Guías narradas
+          </SectionTitle>
+          {guides.ready === guides.total ? (
+            <Muted>Todas descargadas: puedes escucharlas sin conexión.</Muted>
+          ) : (
+            <>
+              <Muted style={{ marginBottom: space.sm }}>
+                Descárgalas antes de salir: en destino puede no haber datos.
+              </Muted>
+              <Button
+                title={guideProgress ? `Descargando ${guideProgress.done}/${guideProgress.total}…` : 'Descargar guías del viaje'}
+                variant="secondary"
+                loading={guideProgress !== null && guideProgress.total === 0}
+                disabled={guideProgress !== null}
+                onPress={downloadGuides}
+              />
+            </>
+          )}
+        </>
       ) : null}
 
       <Button title="Borrar viaje" variant="danger" onPress={confirmDelete} style={{ marginTop: space.xl }} />

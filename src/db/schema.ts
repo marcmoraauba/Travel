@@ -86,6 +86,8 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (place_id, language, length)
   );
   `,
+  // v2: marcar paradas ya visitadas, para recalcular el resto del día ("voy tarde").
+  `ALTER TABLE day_stops ADD COLUMN visited INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {

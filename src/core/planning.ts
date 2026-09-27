@@ -2,7 +2,7 @@ import type { Booking, Day, Pace, Place, Trip } from '../db/types';
 import type { LatLng } from './geo';
 import { windowsForDate } from './openingHours';
 import type { DayInput, DayPlan, OptStop } from './optimizer';
-import { formatHHMM, parseHHMM } from './time';
+import { formatHHMM, Minutes, parseHHMM } from './time';
 
 /**
  * Puente entre el modelo de datos y el optimizador. Puro: la red (matriz) y la BD quedan fuera.
@@ -22,10 +22,18 @@ export function tripBase(trip: Trip): LatLng {
 
 export const isRoutable = (p: Place): p is Place & { lat: number; lng: number } => p.lat !== null && p.lng !== null;
 
-/** Puntos para la matriz, en el orden que espera el optimizador: base, lugares, base. */
-export function matrixPoints(trip: Trip, places: Place[]): LatLng[] {
+/**
+ * Puntos para la matriz, en el orden que espera el optimizador: salida, lugares, base.
+ * La salida es la base salvo al recalcular a mitad de día (`origin` = donde está el viajero).
+ */
+export function matrixPoints(trip: Trip, places: Place[], origin?: LatLng): LatLng[] {
   const base = tripBase(trip);
-  return [base, ...places.filter(isRoutable).map((p) => ({ lat: p.lat, lng: p.lng })), base];
+  return [origin ?? base, ...places.filter(isRoutable).map((p) => ({ lat: p.lat, lng: p.lng })), base];
+}
+
+/** Opciones para recalcular a mitad de día: empezar a otra hora (y, vía matriz, desde otro punto). */
+export interface ReplanOptions {
+  startAt?: Minutes;
 }
 
 export function buildDayInput(
@@ -34,6 +42,7 @@ export function buildDayInput(
   places: Place[],
   bookings: Booking[],
   matrix: number[][],
+  options: ReplanOptions = {},
 ): DayInput {
   const routable = places.filter(isRoutable);
   const bookingByPlace = new Map(bookings.filter((b) => b.date === day.date).map((b) => [b.placeId, b]));
@@ -50,7 +59,8 @@ export function buildDayInput(
     };
   });
   const pace = PACE[trip.pace];
-  const dayStart = parseHHMM(day.startTime) ?? 9 * 60;
+  const plannedStart = parseHHMM(day.startTime) ?? 9 * 60;
+  const dayStart = options.startAt !== undefined ? Math.max(options.startAt, plannedStart) : plannedStart;
   const dayEnd = parseHHMM(day.endTime) ?? 20 * 60;
   return {
     stops,
@@ -67,10 +77,10 @@ export function buildDayInput(
   };
 }
 
-export function planToStops(plan: DayPlan) {
-  return plan.visits.map((v, position) => ({
+export function planToStops(plan: DayPlan, firstPosition = 0) {
+  return plan.visits.map((v, i) => ({
     placeId: v.id,
-    position,
+    position: firstPosition + i,
     arrival: formatHHMM(v.arrival),
     start: formatHHMM(v.start),
     departure: formatHHMM(v.end),

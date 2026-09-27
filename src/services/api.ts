@@ -1,4 +1,5 @@
 import { estimateMatrix, LatLng, TransportMode } from '../core/geo';
+import type { GuideLength } from '../db/types';
 import { config, hasBackend } from './config';
 
 /** Cliente del backend (backend/src/index.ts). Si no hay backend o red, degrada con elegancia. */
@@ -13,10 +14,10 @@ export interface SearchResult {
   openingHours: string | null;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, timeoutMs = 12_000): Promise<T> {
   if (!hasBackend()) throw new Error('Backend no configurado (EXPO_PUBLIC_API_URL)');
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12_000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${config.apiUrl}${path}`, {
       ...init,
@@ -27,7 +28,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         ...init?.headers,
       },
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status} en ${path}`);
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(body?.error ?? `HTTP ${res.status} en ${path}`);
+    }
     return (await res.json()) as T;
   } finally {
     clearTimeout(timeout);
@@ -81,4 +85,45 @@ export async function routeGeometry(points: LatLng[], mode: TransportMode): Prom
   } catch {
     return null;
   }
+}
+
+// ——— IA ———
+
+export interface Suggestion {
+  name: string;
+  category: string;
+  reason: string;
+  visitMinutes: number;
+  priority: 'must' | 'optional';
+  /** Resultado del mapa que casa con la sugerencia; null = no se ha podido ubicar con confianza. */
+  match: SearchResult | null;
+}
+
+export async function recommendPlaces(input: {
+  city: string;
+  lat: number;
+  lng: number;
+  days: number;
+  request: string;
+  existing: string[];
+}): Promise<Suggestion[]> {
+  const data = await request<{ suggestions: Suggestion[] }>(
+    '/v1/recommend',
+    { method: 'POST', body: JSON.stringify({ ...input, lang: 'es' }) },
+    90_000,
+  );
+  return data.suggestions;
+}
+
+export async function fetchGuideText(input: {
+  name: string;
+  city: string;
+  lat: number;
+  lng: number;
+  category: string | null;
+  length: GuideLength;
+  lang: string;
+}): Promise<string> {
+  const data = await request<{ text: string }>('/v1/guide', { method: 'POST', body: JSON.stringify(input) }, 90_000);
+  return data.text;
 }

@@ -36,7 +36,9 @@ export default function RootLayout() {
           <Stack.Screen name="trip/new" options={{ title: 'Viaje', presentation: 'modal' }} />
           <Stack.Screen name="trip/[id]/index" options={{ title: '' }} />
           <Stack.Screen name="trip/[id]/add-place" options={{ title: 'Añadir lugar', presentation: 'modal' }} />
+          <Stack.Screen name="trip/[id]/suggest" options={{ title: 'Sugerencias', presentation: 'modal' }} />
           <Stack.Screen name="place/[id]" options={{ title: 'Lugar' }} />
+          <Stack.Screen name="guide/[placeId]" options={{ title: 'Guía' }} />
           <Stack.Screen name="day/[id]" options={{ title: 'Día' }} />
         </Stack>
       </SQLiteProvider>

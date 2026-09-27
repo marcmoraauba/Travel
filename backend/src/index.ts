@@ -11,26 +11,28 @@ export interface Env {
   MAPBOX_TOKEN: string;
   /** Opcional: si se define, la app debe enviarlo en la cabecera X-App-Key. */
   APP_KEY?: string;
+  /** Clave de la API de Claude. `wrangler secret put ANTHROPIC_API_KEY`. */
+  ANTHROPIC_API_KEY?: string;
+  /**
+   * KV para las guías: se generan una vez y sirven para siempre y para todos.
+   * `wrangler kv namespace create GUIDES` y pega el id en wrangler.toml.
+   */
+  GUIDES?: KVNamespace;
 }
 
 type Mode = 'walking' | 'cycling' | 'driving';
-interface Point {
+export interface Point {
   lat: number;
   lng: number;
 }
+
+import { generateGuide, recommendPlaces } from './ai';
+import { HttpError, sha256 } from './http';
 
 const MAPBOX = 'https://api.mapbox.com';
 const MAX_POINTS = 25;
 const DAY_SECONDS = 86_400;
 
-class HttpError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
 
 const json = (data: unknown, status = 200, maxAge = 0) =>
   new Response(JSON.stringify(data), {
@@ -128,24 +130,30 @@ interface SearchBoxFeature {
   };
 }
 
-async function search(url: URL, env: Env) {
-  const q = (url.searchParams.get('q') ?? '').trim();
-  if (q.length < 2 || q.length > 200) throw new HttpError(400, 'q: entre 2 y 200 caracteres');
-  const kind = url.searchParams.get('kind') === 'city' ? 'city' : 'poi';
-  const lat = Number(url.searchParams.get('lat'));
-  const lng = Number(url.searchParams.get('lng'));
+export interface SearchResult {
+  id: string;
+  name: string;
+  address: string | null;
+  lat: number;
+  lng: number;
+  category: string | null;
+  openingHours: string | null;
+}
 
+export async function searchMapbox(
+  env: Env,
+  opts: { q: string; kind: 'poi' | 'city'; near?: Point; lang?: string; limit?: number },
+): Promise<SearchResult[]> {
+  const { q, kind } = opts;
   const upstream = new URL(`${MAPBOX}/search/searchbox/v1/forward`);
   upstream.searchParams.set('q', q);
-  upstream.searchParams.set('limit', '8');
-  upstream.searchParams.set('language', url.searchParams.get('lang') ?? 'es');
+  upstream.searchParams.set('limit', String(opts.limit ?? 8));
+  upstream.searchParams.set('language', opts.lang ?? 'es');
   upstream.searchParams.set('types', kind === 'city' ? 'place' : 'poi,address');
-  if (url.searchParams.has('lat') && Number.isFinite(lat) && Number.isFinite(lng)) {
-    upstream.searchParams.set('proximity', `${lng},${lat}`);
-  }
+  if (opts.near) upstream.searchParams.set('proximity', `${opts.near.lng},${opts.near.lat}`);
 
   const data = (await mapbox(upstream, env)) as { features?: SearchBoxFeature[] };
-  const results = (data.features ?? [])
+  return (data.features ?? [])
     .map((f, i) => {
       const p = f.properties ?? {};
       const coords = p.coordinates
@@ -154,7 +162,7 @@ async function search(url: URL, env: Env) {
           ? { lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] }
           : null;
       if (!coords || !p.name) return null;
-      return {
+      const result: SearchResult = {
         id: p.mapbox_id ?? `${i}`,
         name: p.name,
         address: p.full_address ?? p.place_formatted ?? null,
@@ -163,8 +171,19 @@ async function search(url: URL, env: Env) {
         category: kind === 'city' ? null : normalizeCategory(p.poi_category),
         openingHours: periodsToOsm(p.metadata?.open_hours?.periods),
       };
+      return result;
     })
     .filter((r) => r !== null);
+}
+
+async function search(url: URL, env: Env) {
+  const q = (url.searchParams.get('q') ?? '').trim();
+  if (q.length < 2 || q.length > 200) throw new HttpError(400, 'q: entre 2 y 200 caracteres');
+  const kind = url.searchParams.get('kind') === 'city' ? 'city' : 'poi';
+  const lat = Number(url.searchParams.get('lat'));
+  const lng = Number(url.searchParams.get('lng'));
+  const near = url.searchParams.has('lat') && Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : undefined;
+  const results = await searchMapbox(env, { q, kind, near, lang: url.searchParams.get('lang') ?? 'es' });
   return { results };
 }
 
@@ -197,7 +216,7 @@ async function directions(body: unknown, env: Env) {
 
 // ——— Router con caché ———
 
-async function cached(request: Request, cacheKeyUrl: string, ctx: ExecutionContext, produce: () => Promise<unknown>) {
+async function cached(cacheKeyUrl: string, ctx: ExecutionContext, produce: () => Promise<unknown>) {
   const cache = caches.default;
   const key = new Request(cacheKeyUrl, { method: 'GET' });
   const hit = await cache.match(key);
@@ -207,10 +226,16 @@ async function cached(request: Request, cacheKeyUrl: string, ctx: ExecutionConte
   return res;
 }
 
-async function sha256(text: string) {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+async function readJson(request: Request): Promise<{ text: string; body: unknown }> {
+  const text = await request.text();
+  if (text.length > 10_000) throw new HttpError(413, 'Petición demasiado grande');
+  try {
+    return { text, body: JSON.parse(text) };
+  } catch {
+    throw new HttpError(400, 'JSON no válido');
+  }
 }
+
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -222,20 +247,21 @@ export default {
 
       if (request.method === 'GET' && url.pathname === '/v1/search') {
         url.searchParams.sort();
-        return await cached(request, `https://cache.travel/search?${url.searchParams}`, ctx, () => search(url, env));
+        return await cached(`https://cache.travel/search?${url.searchParams}`, ctx, () => search(url, env));
+      }
+      if (request.method === 'POST' && url.pathname === '/v1/recommend') {
+        const { body } = await readJson(request);
+        return json(await recommendPlaces(env, body, (q, near) => searchMapbox(env, { q, kind: 'poi', near, limit: 3 })));
+      }
+      if (request.method === 'POST' && url.pathname === '/v1/guide') {
+        const { body } = await readJson(request);
+        return json(await generateGuide(env, body, ctx));
       }
       if (request.method === 'POST' && (url.pathname === '/v1/matrix' || url.pathname === '/v1/directions')) {
-        const text = await request.text();
-        if (text.length > 10_000) throw new HttpError(413, 'Petición demasiado grande');
-        let body: unknown;
-        try {
-          body = JSON.parse(text);
-        } catch {
-          throw new HttpError(400, 'JSON no válido');
-        }
+        const { text, body } = await readJson(request);
         const handler = url.pathname === '/v1/matrix' ? matrix : directions;
         const key = `https://cache.travel${url.pathname}/${await sha256(text)}`;
-        return await cached(request, key, ctx, () => handler(body, env));
+        return await cached(key, ctx, () => handler(body, env));
       }
       throw new HttpError(404, 'No encontrado');
     } catch (e) {
